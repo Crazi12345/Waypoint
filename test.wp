@@ -1,0 +1,20 @@
+MISSION mission1 {
+    10, 20,
+    DRONES {
+        DRONE drone1 { 1, 2, {a, b, c} }
+        DRONE drone2 { 3, 4, {d, e} }
+    },
+    WAYPOINTS {
+        WAYPOINT wp1 { x, {p, q} }
+        WAYPOINT wp2 { y, {r, s} }
+        WAYPOINT pindis { pindis, {r, s} }
+
+
+    },
+    COMMANDS {
+        COMMAND cmd1 { MOVEMENTACTION move1 { 5, x, wp1 } }
+        COMMAND cmd2 { INTERNALACTION action1 { a, b, c } }
+                COMMAND cmd3 { INTERNALACTION action1 { a, d, c } }
+
+    }
+}

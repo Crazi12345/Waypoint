@@ -1,0 +1,53 @@
+grammar org.xtext.example.mydsl.Waypoint with org.eclipse.xtext.common.Terminals
+
+generate waypoint "http://www.xtext.org/example/mydsl/Waypoint"
+
+Model:
+    missions+=M;
+
+M:
+    'MISSION' name=ID '{'
+        time1=INT ','
+        time2=INT ','
+        'DRONES' '{' drones+=D+ '}' ','
+        'WAYPOINTS' '{' waypoints+=W+ '}' ','
+        'COMMANDS' '{' commands+=C+ '}'
+    '}';
+
+D:
+    'DRONE' name=ID '{'
+        param1=INT ','
+        param2=INT ','
+        list=List
+    '}';
+
+W:
+    'WAYPOINT' name=ID '{'
+        param=ID ','
+        list=List
+    '}';
+
+C:
+    'COMMAND' name=ID '{'
+        (ma=MA | ia=IA)
+    '}';
+
+MA:
+    'MOVEMENTACTION' name=ID '{'
+        param1=INT ','
+        param2=ID ','
+        waypoint=ID
+    '}';
+
+IA:
+    'INTERNALACTION' name=ID '{'
+        param1=ID ','
+        param2=ID ','
+        param3=ID
+    '}';
+
+List:
+    {List} '{' (values+=ID (',' values+=ID)*)? '}';
+
+terminal DATE_TIME:
+    INT ':' INT ':' INT 'T' INT ':' INT ':' INT;
