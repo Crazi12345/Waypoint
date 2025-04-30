@@ -1,0 +1,474 @@
+# preReq installations: pip install dash plotly pandas numpy
+
+import dash
+from dash import dcc, html, Input, Output
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import time  # Required for Mission class
+import math  # Required for distance/movement calculations
+
+# --- Classes from your previous main.py ---
+# Assuming these classes are available, either in a separate file or here.
+# If in a separate file named 'mission_classes.py', you would use:
+# from mission_classes import Location, Drone, Waypoint, Command, MovementCommand, InternalCommand, Mission
+
+
+class Location:
+    """Represents a geographical location with latitude, longitude, and altitude."""
+
+    def __init__(self, latitude: float, longitude: float, altitude: float = 0.0):
+        if not (-90 <= latitude <= 90):
+            raise ValueError("Latitude must be between -90 and 90 degrees.")
+        # Basic validation, more robust validation for longitude might be needed
+        # if not (-180 <= longitude <= 180):
+        #      raise ValueError("Longitude must be between -180 and 180 degrees.")
+        self.latitude = latitude
+        self.longitude = longitude
+        self.altitude = altitude  # Assuming meters or feet, specify if needed
+
+    def __repr__(self):
+        return f"Location(lat={self.latitude:.6f}, lon={self.longitude:.6f}, alt={self.altitude})"
+
+    def __eq__(self, other):
+        if isinstance(other, Location):
+            # Using a small tolerance for floating point comparison
+            return (abs(self.latitude - other.latitude) < 1e-6 and
+                    abs(self.longitude - other.longitude) < 1e-6 and
+                    abs(self.altitude - other.altitude) < 1e-6)
+        return False
+
+
+class Drone:
+    """Represents a single drone with its state."""
+
+    def __init__(self, drone_id: str, velocity: float, battery_lvl: int, current_location: Location):
+        self.drone_id = drone_id
+        # e.g., in meters per second (float for precision)
+        self.velocity = velocity
+        self.battery_lvl = battery_lvl  # e.g., percentage 0-100
+        self.current_location = current_location
+        self._current_command_index = 0  # Keep track of the current command being executed
+
+        if not (0 <= self.battery_lvl <= 100):
+            print(f"Warning: Battery level {self.battery_lvl} for {
+                  self.drone_id} is outside expected range [0, 100].")
+
+    def __repr__(self):
+        return (f"Drone(id='{self.drone_id}', velocity={self.velocity}, "
+                f"battery={self.battery_lvl}%, location={self.current_location})")
+
+    # Simple method to get the current command
+    def get_current_command(self, commands: list['Command']) -> 'Command' | None:
+        if 0 <= self._current_command_index < len(commands):
+            return commands[self._current_command_index]
+        return None
+
+    # Simple method to advance to the next command
+    def advance_command(self):
+        self._current_command_index += 1
+
+
+class Waypoint:
+    """Represents a navigation waypoint."""
+
+    def __init__(self, waypoint_id: str, name: str, location: Location):
+        self.waypoint_id = waypoint_id
+        self.name = name
+        self.location = location
+
+    def __repr__(self):
+        return f"Waypoint(id='{self.waypoint_id}', name='{self.name}', location={self.location})"
+
+
+class Command:
+    """Base class for all drone commands."""
+
+    def __init__(self, command_id: str, drone_id: str):
+        self.command_id = command_id
+        self.drone_id = drone_id  # The ID of the drone this command is for
+
+    def __repr__(self):
+        return f"Command(id='{self.command_id}', drone_id='{self.drone_id}')"
+
+
+class MovementCommand(Command):
+    """Represents a command for drone movement."""
+
+    def __init__(self, command_id: str, drone_id: str, direction: int, turn: str, goto_waypoint_id: str):
+        super().__init__(command_id, drone_id)
+        # e.g., heading in degrees (can be simplified for this demo)
+        self.direction = direction
+        # e.g., "left", "right", "none" (can be ignored for this demo)
+        self.turn = turn
+        self.goto_waypoint_id = goto_waypoint_id  # Reference to a Waypoint by ID
+
+    def __repr__(self):
+        return (f"MovementCommand(id='{self.command_id}', drone_id='{self.drone_id}', "
+                f"direction={self.direction}, turn='{self.turn}', goto_waypoint_id='{self.goto_waypoint_id}')")
+
+
+class InternalCommand(Command):
+    """Represents a command for internal drone actions."""
+
+    def __init__(self, command_id: str, drone_id: str, is_charging: bool = False, is_calibrating: bool = False, is_processing: bool = False):
+        super().__init__(command_id, drone_id)
+        self.is_charging = is_charging
+        self.is_calibrating = is_calibrating
+        self.is_processing = is_processing
+
+        # Ensure only one internal action is true at a time (optional, depends on logic)
+        # active_actions = sum([self.is_charging, self.is_calibrating, self.is_processing])
+        # if active_actions > 1:
+        #     print(f"Warning: Multiple internal actions true for command {self.command_id}.")
+
+    def __repr__(self):
+        actions = []
+        if self.is_charging:
+            actions.append("charging")
+        if self.is_calibrating:
+            actions.append("calibrating")
+        if self.is_processing:
+            actions.append("processing")
+        action_str = ", ".join(actions) if actions else "none"
+        return (f"InternalCommand(id='{self.command_id}', drone_id='{self.drone_id}', "
+                f"actions=[{action_str}])")
+
+
+class Mission:
+    """Represents a mission plan containing drones, waypoints, and commands."""
+
+    def __init__(self, name: str, start_time: int, end_time: int):
+        self.name = name
+        self.start_time = start_time  # Unix timestamp or similar integer representation
+        self.end_time = end_time   # Unix timestamp or similar integer representation
+        self.drones: dict[str, Drone] = {}       # Store drones by drone_id
+        # Store waypoints by waypoint_id
+        self.waypoints: dict[str, Waypoint] = {}
+        # Store commands in a list (order might matter)
+        self.commands: list[Command] = []
+
+        if start_time >= end_time:
+            print(f"Warning: Mission start time ({
+                  start_time}) is not before end time ({end_time}).")
+
+    def add_drone(self, drone: Drone):
+        """Adds a drone to the mission."""
+        if drone.drone_id in self.drones:
+            print(f"Warning: Drone with ID '{
+                  drone.drone_id}' already exists, replacing.")
+        self.drones[drone.drone_id] = drone
+
+    def add_waypoint(self, waypoint: Waypoint):
+        """Adds a waypoint to the mission."""
+        if waypoint.waypoint_id in self.waypoints:
+            print(f"Warning: Waypoint with ID '{
+                  waypoint.waypoint_id}' already exists, replacing.")
+        self.waypoints[waypoint.waypoint_id] = waypoint
+
+    def add_command(self, command: Command):
+        """Adds a command to the mission's command list."""
+        # Optional: Validate if the command's drone_id exists in the mission
+        if command.drone_id not in self.drones:
+            print(f"Warning: Command '{
+                  command.command_id}' targets non-existent drone '{command.drone_id}'.")
+
+        # Optional: If it's a MovementCommand, validate if the goto_waypoint_id exists
+        if isinstance(command, MovementCommand):
+            if command.goto_waypoint_id not in self.waypoints:
+                print(f"Warning: Movement command '{
+                      command.command_id}' targets non-existent waypoint '{command.goto_waypoint_id}'.")
+
+        self.commands.append(command)
+
+    def __repr__(self):
+        return (f"Mission(name='{self.name}', start={self.start_time}, end={self.end_time}, "
+                f"{len(self.drones)} drones, {len(self.waypoints)} waypoints, {len(self.commands)} commands)")
+
+    # Simple simulation step - moves drones towards their current waypoint command
+    def simulate_step(self, step_interval_seconds: float):
+        for drone_id, drone in self.drones.items():
+            command = drone.get_current_command(self.commands)
+
+            if isinstance(command, MovementCommand):
+                target_waypoint_id = command.goto_waypoint_id
+                target_waypoint = self.waypoints.get(target_waypoint_id)
+
+                if target_waypoint:
+                    target_loc = target_waypoint.location
+                    current_loc = drone.current_location
+
+                    # Simple linear movement towards the target
+                    # Calculate vector from current to target
+                    vec_lat = target_loc.latitude - current_loc.latitude
+                    vec_lon = target_loc.longitude - current_loc.longitude
+                    vec_alt = target_loc.altitude - current_loc.altitude
+
+                    # Simple Euclidean distance in lat/lon space
+                    distance_lat_lon = math.sqrt(vec_lat**2 + vec_lon**2)
+                    distance_3d = math.sqrt(
+                        vec_lat**2 + vec_lon**2 + vec_alt**2)
+
+                    # Calculate step size in terms of coordinate change
+                    # This is a simplified approach and doesn't account for spherical earth or varying degrees per meter
+                    # A more accurate simulation would use geographic calculations.
+                    # For visualization, a constant step towards the target is often sufficient.
+                    # Distance covered in this interval
+                    step_distance = drone.velocity * step_interval_seconds
+
+                    if distance_3d > 1e-6:  # Avoid division by zero or tiny movements near target
+                        # Calculate the fraction of the distance to move
+                        # Don't overshoot
+                        move_fraction = min(step_distance / distance_3d, 1.0)
+
+                        # Update position using the fraction
+                        new_lat = current_loc.latitude + vec_lat * move_fraction
+                        new_lon = current_loc.longitude + vec_lon * move_fraction
+                        new_alt = current_loc.altitude + vec_alt * move_fraction
+
+                        drone.current_location = Location(
+                            new_lat, new_lon, new_alt)
+
+                        # Check if the drone is "close enough" to the waypoint
+                        # Use a small threshold
+                        distance_to_target_after_move = math.sqrt(
+                            (target_loc.latitude - drone.current_location.latitude)**2 +
+                            (target_loc.longitude - drone.current_location.longitude)**2 +
+                            (target_loc.altitude - drone.current_location.altitude)**2
+                        )
+
+                        # If closer than half a step away
+                        if distance_to_target_after_move < (drone.velocity * step_interval_seconds * 0.5):
+                            drone.current_location = target_loc  # Snap to the target location
+                            drone.advance_command()  # Move to the next command
+                            print(f"Drone {drone.drone_id} reached waypoint {
+                                  target_waypoint_id}, advancing command.")
+
+                # Handle other command types (InternalCommand) if needed
+                # For InternalCommand, simulation might involve changing battery, status flags, etc.
+            elif isinstance(command, InternalCommand):
+                # Simple example: if calibrating, it takes 10 seconds.
+                # This requires state management within the drone (e.g., command start time)
+                # For this demo, let's just advance the command immediately for simplicity
+                # Or, better, make InternalCommand take time and handle completion
+                print(f"Drone {drone.drone_id} is performing internal command {
+                      command.command_id}.")
+                # In a real system, you'd track how long the internal command takes
+                # For this demo, we'll just auto-complete it immediately after one step
+                # To make internal commands take time, you'd need a way to track command duration
+                # and state per drone. Skipping complex internal command simulation for now.
+                drone.advance_command()
+
+            # If no more commands, the drone stops or hovers, depending on desired behavior.
+            # The simulation stops for this drone.
+            elif command is None:
+                # Drone has no active commands, it stays at its current location
+                pass
+
+
+# --- RouteView Class (Dash Application) ---
+
+class RouteView:
+    # Class variable to hold the Mission instance
+    # This allows the callback function to access the shared mission data
+    mission: Mission | None = None
+
+    def __init__(self, mission: Mission, name=__name__):
+        if not isinstance(mission, Mission):
+            raise TypeError(
+                "RouteView must be initialized with a Mission object.")
+        RouteView.mission = mission  # Store the mission instance in the class variable
+
+        self.app = dash.Dash(name)
+        self.interval_seconds = 0.5  # Matches the dcc.Interval interval
+        self.setup_layout()
+        self.setup_callbacks()
+
+    def setup_layout(self):
+        # Define the app layout
+        self.app.layout = html.Div([
+            html.H1(
+                f"Live Map: Mission - {RouteView.mission.name if RouteView.mission else 'No Mission Loaded'}"),
+            # Added style for full width and height
+            dcc.Graph(id='live-map',
+                      style={'width': '100%', 'height': '90vh'}),
+            dcc.Interval(
+                id='interval-component',
+                interval=int(self.interval_seconds * 1000),  # milliseconds
+                n_intervals=0
+            )
+        ])
+
+    @staticmethod
+    def lerp(v0, v1, t):
+        """Linear interpolation - not used directly for movement here, but kept from previous code."""
+        t = max(0.0, min(1.0, t))
+        return (1 - t) * v0 + t * v1
+
+    def setup_callbacks(self):
+        # Define and register the callback function
+        @self.app.callback(Output('live-map', 'figure'),
+                           Input('interval-component', 'n_intervals'))
+        def update_map(n):
+            # Access the shared Mission instance from the class variable
+            mission = RouteView.mission
+            if mission is None:
+                # Return an empty figure or a loading message if no mission is loaded
+                return go.Figure()
+
+            # --- Simulation Step ---
+            # Advance the state of the mission based on the interval
+            mission.simulate_step(self.interval_seconds)
+            # --- End Simulation Step ---
+
+            current_positions = []
+
+            # Get current positions from the Mission's Drones
+            for drone_id, drone in mission.drones.items():
+                current_positions.append({
+                    'latitude': drone.current_location.latitude,
+                    'longitude': drone.current_location.longitude,
+                    # Display drone info
+                    'text': f"{drone.drone_id} (Batt: {drone.battery_lvl}%)"
+                })
+
+            df = pd.DataFrame(current_positions)
+
+            # Create the map figure
+            fig = go.Figure(go.Scattermapbox(
+                lat=df['latitude'],
+                lon=df['longitude'],
+                mode='markers',
+                marker=go.scattermapbox.Marker(
+                    size=10,  # Slightly larger markers
+                    color='red'  # Different color for drones
+                ),
+                text=df['text'],
+                hoverinfo='text'
+            ))
+
+            # Optionally add waypoints to the map
+            waypoint_lats = [
+                wp.location.latitude for wp in mission.waypoints.values()]
+            waypoint_lons = [
+                wp.location.longitude for wp in mission.waypoints.values()]
+            waypoint_names = [wp.name for wp in mission.waypoints.values()]
+
+            if waypoint_lats:  # Only add if there are waypoints
+                fig.add_trace(go.Scattermapbox(
+                    lat=waypoint_lats,
+                    lon=waypoint_lons,
+                    mode='markers',
+                    marker=go.scattermapbox.Marker(
+                        size=8,
+                        color='green',  # Waypoints in green
+                        symbol='star'  # Use a star symbol for waypoints
+                    ),
+                    text=waypoint_names,
+                    hoverinfo='text',
+                    name='Waypoints'  # Add a trace name
+                ))
+
+            # Define map center and zoom level
+            # Center on the mean of all drone positions, or a default if no drones
+            if current_positions:
+                map_center_lat = np.mean([pos['latitude']
+                                         for pos in current_positions])
+                map_center_lon = np.mean([pos['longitude']
+                                         for pos in current_positions])
+            elif waypoint_lats:
+                map_center_lat = np.mean(waypoint_lats)
+                map_center_lon = np.mean(waypoint_lons)
+            else:
+                map_center_lat = 55.405  # Default Odenseish center
+                map_center_lon = 10.40  # Default Odenseish center
+
+            # Adjust zoom level - might need tuning based on the spread of points
+            zoom_level = 11  # Start with a reasonable zoom
+
+            # Consider adjusting zoom dynamically based on the extent of markers/waypoints
+            # This is more complex and left as an exercise if needed.
+
+            fig.update_layout(
+                mapbox=dict(
+                    bearing=0,
+                    center=go.layout.mapbox.Center(
+                        lat=map_center_lat,
+                        lon=map_center_lon
+                    ),
+                    pitch=0,
+                    zoom=zoom_level,
+                    # or 'carto-positron', 'stamen-terrain', etc.
+                    style='open-street-map'
+                ),
+                margin={"r": 0, "t": 30, "l": 0, "b": 0},
+                # Add a title to the map figure itself
+                title=f"Drone Locations - Mission: {mission.name}",
+                # Add legend
+                showlegend=True
+            )
+            return fig
+
+    def run(self):
+        # Method to run the Dash application
+        self.app.run_server(debug=True)
+
+
+# --- Example Usage ---
+if __name__ == '__main__':
+    # Create locations for known places in Odense, Denmark
+    # Coordinates are approximate and might represent the general area or a specific entrance.
+    loc_sdu = Location(latitude=55.3670, longitude=10.4271,
+                       altitude=50.0)  # Near main SDU campus
+    # Near the old OUH site / new construction area
+    loc_ouh = Location(latitude=55.3853, longitude=10.3694, altitude=45.0)
+    # Odense Banegård Center
+    loc_banegaard = Location(
+        latitude=55.4017, longitude=10.3871, altitude=15.0)
+
+    # Create a mission
+    current_time = int(time.time())
+    mission_duration = 7200  # 2 hours
+    my_mission = Mission(name="Odense Survey 2.0",
+                         start_time=current_time,
+                         end_time=current_time + mission_duration)
+
+    # Create drones (example starting positions)
+    drone1 = Drone(drone_id="drone_alpha", velocity=5.0,
+                   battery_lvl=95, current_location=loc_sdu)  # Velocity in m/s
+    drone2 = Drone(drone_id="drone_beta", velocity=3.5,
+                   battery_lvl=80, current_location=loc_banegaard)
+
+    # Create waypoints
+    waypoint_sdu = Waypoint(waypoint_id="wp_sdu",
+                            name="SDU Campus", location=loc_sdu)
+    waypoint_ouh = Waypoint(waypoint_id="wp_ouh",
+                            name="OUH Hospital", location=loc_ouh)
+    waypoint_banegaard = Waypoint(
+        waypoint_id="wp_banegaard", name="Train Station", location=loc_banegaard)
+
+    # Add components to the mission
+    my_mission.add_drone(drone1)
+    my_mission.add_drone(drone2)
+    my_mission.add_waypoint(waypoint_sdu)
+    my_mission.add_waypoint(waypoint_ouh)
+    my_mission.add_waypoint(waypoint_banegaard)
+
+    # Create commands and add them to the mission (example sequence)
+    # Drone alpha: SDU -> OUH -> Banegaard
+    my_mission.add_command(MovementCommand(
+        command_id="alpha_1", drone_id="drone_alpha", direction=0, turn="none", goto_waypoint_id="wp_ouh"))
+    my_mission.add_command(MovementCommand(command_id="alpha_2", drone_id="drone_alpha",
+                           direction=0, turn="none", goto_waypoint_id="wp_banegaard"))
+
+    # Drone beta: Banegaard -> SDU -> OUH
+    my_mission.add_command(MovementCommand(
+        command_id="beta_1", drone_id="drone_beta", direction=0, turn="none", goto_waypoint_id="wp_sdu"))
+    my_mission.add_command(MovementCommand(
+        command_id="beta_2", drone_id="drone_beta", direction=0, turn="none", goto_waypoint_id="wp_ouh"))
+    my_mission.add_command(InternalCommand(
+        command_id="beta_calibrate", drone_id="drone_beta", is_calibrating=True))
+
+    # Create and run the RouteView with the mission
+    route_app = RouteView(mission=my_mission)
+    route_app.run()
