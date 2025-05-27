@@ -3,7 +3,7 @@ grammar org.xtext.example.mydsl.Waypoint with org.eclipse.xtext.common.Terminals
 generate waypoint "http://www.xtext.org/example/mydsl/Waypoint"
 
 Model:
-    missions+=M;
+    missions+=M+;
 
 M:
     'MISSION' name=ID '{'
@@ -11,7 +11,7 @@ M:
         time2=INT ','
         'DRONES' '{' drones+=D+ '}' ','
         'WAYPOINTS' '{' waypoints+=W+ '}' ','
-        'COMMANDS' '{' commands+=C+ '}'
+        'COMMANDS' '{' commands+=CommandSequence* '}'
     '}';
 
 D:
@@ -22,23 +22,20 @@ D:
     '}';
 
 W:
-    'WAYPOINT' name=ID '{'
-        param=ID ','
-        list=List
-    '}';
-
-C:
-    'COMMAND' name=ID '{'
-        (ma=MA | ia=IA)
-    '}';
+   'WAYPOINT' name=ID '{'
+        '{'
+            altitude=INT ','
+            latitude=INT ','
+            longitude=INT
+        '}';
 
 MA:
     'MOVEMENTACTION' name=ID '{'
         param1=INT ','
-        param2=ID ','
-        waypoint=ID
+        waypoint=[W|ID]
     '}';
 
+// Internal Action Definition
 IA:
     'INTERNALACTION' name=ID '{'
         param1=ID ','
@@ -46,8 +43,25 @@ IA:
         param3=ID
     '}';
 
+CommandSequence returns CommandSequence:
+    Action // Starts with an Action (operand)
+    (
+      {CommandSequence.left=current} // Action to build the expression tree
+      '+'
+      right=Action
+    )*;
+
+// Action: Defines the operands (MA with drone, IA with drone, or grouped sequence).
+// This rule, with assignments, will generate an Action.java EClass.
+Action returns CommandSequence: // Returns CommandSequence for type compatibility in the tree
+    (ma_def=MA ',' drone_id_str=ID) |
+    (ia_def=IA ',' drone_id_str=ID) |
+    '(' grouped_sequence=CommandSequence ')';
+
+
 List:
-    {List} '{' (values+=ID (',' values+=ID)*)? '}';
+    {List} '{' (values+=INT (',' values+=INT)*)? '}';
 
 terminal DATE_TIME:
     INT ':' INT ':' INT 'T' INT ':' INT ':' INT;
+

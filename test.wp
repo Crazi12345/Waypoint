@@ -1,20 +1,70 @@
 MISSION mission1 {
+    0, 3600,
+
+    DRONES {
+
+
+
+                DRONE dC { 10, 70, {1, 5536700,1042710 } }
+                DRONE dA { 10, 70, {1, 5536700,1042710 } }
+
+
+    },
+
+    WAYPOINTS {
+
+        WAYPOINT sdu_campus {
+            {50, 5536700, 1042710
+        }
+        WAYPOINT ouh_hospital {
+            {45, 5538530, 1036940
+        }
+        WAYPOINT odense_station {
+            {15, 5540170, 1038710
+        }
+        WAYPOINT odense_zoo {
+            {20, 5538150, 1037500
+        }
+        WAYPOINT munkemose_park {
+            {10, 5539250, 1038500
+        }
+        WAYPOINT havn_odense {
+            {5, 5540800, 1039500
+        }
+
+
+        WAYPOINT egeskov_castle {
+            {50, 5517650, 1048950
+        }
+
+        },
+    	COMMANDS {
+
+           MOVEMENTACTION move1 { 2, havn_odense }, dC
+
+    }
+}
+MISSION mission2 {
     10, 20,
     DRONES {
-        DRONE drone1 { 1, 2, {a, b, c} }
-        DRONE drone2 { 3, 4, {d, e} }
+        DRONE dA { 10, 70, {0, 5540170,1042710 } }
+        DRONE dB { 10, 70, {0, 5536700,1036940 }}
     },
     WAYPOINTS {
-        WAYPOINT wp1 { x, {p, q} }
-        WAYPOINT wp2 { y, {r, s} }
-        WAYPOINT pindis { pindis, {r, s} }
-
+       WAYPOINT sdu_campus {
+            {50, 5536700, 1042710
+        }
+        WAYPOINT ouh_hospital {
+            {45, 5538530, 1036940
+        }
+        WAYPOINT odense_station {
+            {15, 5540170, 1038710
+        }
 
     },
     COMMANDS {
-        COMMAND cmd1 { MOVEMENTACTION move1 { 5, x, wp1 } }
-        COMMAND cmd2 { INTERNALACTION action1 { a, b, c } }
-                COMMAND cmd3 { INTERNALACTION action1 { a, d, c } }
-
+         MOVEMENTACTION move1 { 5, ouh_hospital }, dA+
+         INTERNALACTION action1 { a, b, c }, dBeta+
+         INTERNALACTION action1 { a, d,  c }, dAlpha
     }
 }
