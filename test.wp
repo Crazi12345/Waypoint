@@ -5,8 +5,12 @@ MISSION mission1 {
 
 
 
-                DRONE dC { 10, 70, {1, 5536700,1042710 } }
-                DRONE dA { 10, 70, {1, 5536700,1042710 } }
+                DRONE dA { 11, 70, {1, 5536700,1042710 } },
+                DRONE dB { 2, 60, {1, 5536700,1042710 } },
+                DRONE dC { 3, 50, {1, 5536700,1042710 } },
+                DRONE dE { 4, 10, {1, 5536700,1042710 } }, DRONE dC { 10, 70, {1, 5536700,1042710 } },
+                DRONE dF { 5, 25, {1, 5536700,1042710 } }, DRONE dC { 10, 70, {1, 5536700,1042710 } },
+                DRONE dG { 6, 99, {1, 5536700,1042710 } }
 
 
     },
@@ -14,57 +18,63 @@ MISSION mission1 {
     WAYPOINTS {
 
         WAYPOINT sdu_campus {
-            {50, 5536700, 1042710
-        }
+            50, 5536700, 1042710  },
         WAYPOINT ouh_hospital {
-            {45, 5538530, 1036940
-        }
+            45, 5538530, 1036940
+        },
         WAYPOINT odense_station {
-            {15, 5540170, 1038710
-        }
+            15, 5540170, 1038710
+        },
         WAYPOINT odense_zoo {
-            {20, 5538150, 1037500
-        }
+            20, 5538150, 1037500
+        },
         WAYPOINT munkemose_park {
-            {10, 5539250, 1038500
-        }
+            10, 5539250, 1038500
+        },
         WAYPOINT havn_odense {
-            {5, 5540800, 1039500
-        }
+            5, 5540800, 1039500
+        },
 
 
         WAYPOINT egeskov_castle {
-            {50, 5517650, 1048950
+            50, 5517650, 1048950
         }
 
         },
     	COMMANDS {
 
-           MOVEMENTACTION move1 { 2, havn_odense }, dC
+           MOVEMENTACTION move1 { 2, havn_odense }, dA +
+           MOVEMENTACTION move1 { 2, egeskov_castle }, dB +
+             MOVEMENTACTION move1 { 2, ouh_hospital }, dC +
+           MOVEMENTACTION move1 { 2, odense_zoo }, dE+
+             MOVEMENTACTION move1 { 2, havn_odense }, dF +
+           MOVEMENTACTION move1 { 2, egeskov_castle }, dA+
+             MOVEMENTACTION move1 { 2, havn_odense }, dC  +
+           MOVEMENTACTION move1 { 2, egeskov_castle }, dG
 
     }
 }
 MISSION mission2 {
     10, 20,
     DRONES {
-        DRONE dA { 10, 70, {0, 5540170,1042710 } }
+        DRONE dA { 10, 70, {0, 5540170,1042710 } },
         DRONE dB { 10, 70, {0, 5536700,1036940 }}
     },
     WAYPOINTS {
        WAYPOINT sdu_campus {
-            {50, 5536700, 1042710
-        }
+            50, 5536700, 1042710
+        },
         WAYPOINT ouh_hospital {
-            {45, 5538530, 1036940
-        }
+            45, 5538530, 1036940
+        },
         WAYPOINT odense_station {
-            {15, 5540170, 1038710
+            15, 5540170, 1038710
         }
 
     },
     COMMANDS {
-         MOVEMENTACTION move1 { 5, ouh_hospital }, dA+
-         INTERNALACTION action1 { a, b, c }, dBeta+
-         INTERNALACTION action1 { a, d,  c }, dAlpha
-    }
+         MOVEMENTACTION move1 { 5, ouh_hospital }, dA
+         }
+
+
 }

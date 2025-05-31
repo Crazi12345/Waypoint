@@ -3,65 +3,69 @@ grammar org.xtext.example.mydsl.Waypoint with org.eclipse.xtext.common.Terminals
 generate waypoint "http://www.xtext.org/example/mydsl/Waypoint"
 
 Model:
-    missions+=M+;
+    missions+=M+
+;
+
 
 M:
     'MISSION' name=ID '{'
-        time1=INT ','
-        time2=INT ','
-        'DRONES' '{' drones+=D+ '}' ','
-        'WAYPOINTS' '{' waypoints+=W+ '}' ','
+        time1=INT ','	// Start time
+        time2=INT ','	// End time
+        'DRONES' '{' drones+=D (',' drones+=D)* '}' ','
+        'WAYPOINTS' '{' waypoints+=W (',' waypoints+=W)* '}' ','
         'COMMANDS' '{' commands+=CommandSequence* '}'
     '}';
 
 D:
     'DRONE' name=ID '{'
-        param1=INT ','
-        param2=INT ','
-        list=List
+        param1=INT ','  // Velocity / speed
+        param2=INT ','  // BatteryLvl / altitude
+        list=List	           // Waypoint(s) to go to
     '}';
 
 W:
    'WAYPOINT' name=ID '{'
-        '{'
             altitude=INT ','
             latitude=INT ','
             longitude=INT
         '}';
 
+
 MA:
     'MOVEMENTACTION' name=ID '{'
-        param1=INT ','
+        param1=INT ','	 // Direction in degrees
         waypoint=[W|ID]
     '}';
 
-// Internal Action Definition
+
 IA:
     'INTERNALACTION' name=ID '{'
-        param1=ID ','
-        param2=ID ','
-        param3=ID
+        param1=ID ','	 // isCharging
+        param2=ID ','	 // isCalibrating
+        param3=ID		 // isProcessing
     '}';
 
-CommandSequence returns CommandSequence:
-    Action // Starts with an Action (operand)
-    (
-      {CommandSequence.left=current} // Action to build the expression tree
-      '+'
-      right=Action
-    )*;
 
-// Action: Defines the operands (MA with drone, IA with drone, or grouped sequence).
-// This rule, with assignments, will generate an Action.java EClass.
-Action returns CommandSequence: // Returns CommandSequence for type compatibility in the tree
+CommandSequence returns CommandSequence:
+    Action ({CommandSequence.left=current} '+' right=Action)*;
+
+
+Action returns CommandSequence:
     (ma_def=MA ',' drone_id_str=ID) |
     (ia_def=IA ',' drone_id_str=ID) |
     '(' grouped_sequence=CommandSequence ')';
 
 
 List:
-    {List} '{' (values+=INT (',' values+=INT)*)? '}';
+    {List} '{' (values+=ListElement (',' values+=ListElement)*)? '}';
 
-terminal DATE_TIME:
-    INT ':' INT ':' INT 'T' INT ':' INT ':' INT;
+
+ListElement:
+    INT | ID;
+
+
+// terminal DATE_TIME:
+//    INT ':' INT ':' INT 'T' INT ':' INT ':' INT;
+
+
 
